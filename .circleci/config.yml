@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main  # Substitua pelo nome da sua branch principal, se for diferente
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 525600  # Define o tempo limite para um valor apropriado às suas necessidades
+
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v2  # Isso permite que você acesse seu repositório no GitHub
+
+      - name: Download and Install Cloudflared
+        run: |
+          Invoke-WebRequest https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe -OutFile cloudflared.exe
+          Rename-Item -Path .\cloudflared.exe -NewName cloudflared.exe
+        # Especifique um diretório de destino para o Cloudflared
+
+      - name: Authenticate Cloudflare Tunnel
+        run: .\cloudflared.exe tunnel login
+        env:
+          TUNNEL_AUTH_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_AUTH_TOKEN }}
+        # Certifique-se de adicionar a variável CLOUDFLARE_TUNNEL_AUTH_TOKEN aos seus segredos do GitHub
+
+      - name: Enable RDP
+        run: |
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -name "fDenyTSConnections" -Value 0
+          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "UserAuthentication" -Value 1
+          Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "P@ssw0rd!" -Force)
+
+      - name: Download time.py
+        run: |
+          Invoke-WebRequest -Uri "https://www.dropbox.com/scl/fi/x3i9kwdqxycnfbk985n5u/timelimit.py?rlkey=fm6ldzcuz89ekygvw4psg175t&dl=1" -OutFile time.py
+
+      - name: Create Cloudflare Tunnel
+        run: .\cloudflared.exe tunnel create my-tunnel
+        # Substitua "my-tunnel" pelo nome do seu túnel
+
+      - name: Run Cloudflare Tunnel
+        run: .\cloudflared.exe tunnel run my-tunnel
+
+      - name: Run time.py
+        run: python time.py
